@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety Harness Monitor</title>
+<style>
+:root{--bg:#f2f1ec;--panel:#fff;--ink:#1b1f23;--mute:#6b7178;--line:#d9d8d0;--ok:#1f7a4d;--warn:#e8a200;--bad:#d62f1f;--hi:#ffc400}
+@media (prefers-color-scheme:dark){:root{--bg:#16181b;--panel:#202327;--ink:#eceae3;--mute:#9aa0a6;--line:#33373c;--ok:#4cc38a;--warn:#f0b429;--bad:#ff5a47}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Segoe UI",system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:6px solid var(--hi);background:var(--panel)}
+h1{margin:0;font-size:20px;font-weight:800;letter-spacing:.2px}
+.conn{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input{padding:7px 9px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);width:150px}
+button{padding:7px 12px;border:1px solid var(--ink);border-radius:4px;background:var(--ink);color:var(--bg);font-weight:600;cursor:pointer}
+button.alt{background:transparent;color:var(--ink)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--hi);outline-offset:1px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute)}
+.dot.on{background:var(--ok)}.dot.off{background:var(--bad)}
+main{max-width:1100px;margin:0 auto;padding:18px;display:grid;gap:16px}
+#status{padding:18px 20px;border-radius:6px;font-weight:800;font-size:24px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--ok);color:#fff}
+#status small{font-weight:500;font-size:14px;opacity:.95}
+#status.warn{background:var(--warn);color:#1b1f23}
+#status.bad{background:var(--bad);color:#fff;animation:pulse 1s steps(2) infinite}
+@keyframes pulse{50%{filter:brightness(.8)}}
+@media (prefers-reduced-motion:reduce){#status.bad{animation:none}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.card h2{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--mute)}
+.val{font-size:34px;font-weight:800}.val span{font-size:15px;font-weight:500;color:var(--mute);margin-left:4px}
+.tag{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:3px;font-size:13px;font-weight:700;background:var(--ok);color:#fff}
+.tag.bad{background:var(--bad)}.tag.warn{background:var(--warn);color:#1b1f23}.tag.mute{background:var(--mute)}
+svg{width:100%;height:60px;display:block;margin-top:8px}
+.wide{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+@media(max-width:760px){.wide{grid-template-columns:1fr}}
+ul{list-style:none;margin:0;padding:0;max-height:240px;overflow:auto}
+li{padding:7px 0;border-bottom:1px solid var(--line);display:flex;gap:10px;font-size:14px}
+li time{color:var(--mute);min-width:70px}
+li.bad b{color:var(--bad)}
+a{color:inherit;font-weight:600}
+.row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border:0}
+</style></head>
+<body>
+<header>
+  <h1>Industrial Safety Harness</h1>
+  <div class="conn">
+    <span class="dot" id="dot"></span><span id="connText">Not connected</span>
+    <a href="/api/export.csv">Download CSV</a>
+  </div>
+</header>
+<main>
+  <div id="status"><span id="stText">Waiting for data</span><small id="stSub">Enter the ESP32 address or start demo mode.</small></div>
+
+  <div class="grid">
+    <div class="card"><h2>Heart rate</h2><div class="val" id="hr">--<span>BPM</span></div><span class="tag mute" id="hrTag">No contact</span><svg id="hrChart" viewBox="0 0 200 60" preserveAspectRatio="none"></svg></div>
+    <div class="card"><h2>Body temperature</h2><div class="val" id="temp">--<span>°C</span></div><span class="tag mute" id="tempTag">No reading</span><svg id="tempChart" viewBox="0 0 200 60" preserveAspectRatio="none"></svg></div>
+    <div class="card"><h2>Pressure (FSR)</h2><div class="val" id="fsr">--<span>ADC</span></div><span class="tag" id="fsrTag">Normal</span><svg id="fsrChart" viewBox="0 0 200 60" preserveAspectRatio="none"></svg></div>
+    <div class="card"><h2>Acceleration</h2><div class="val" id="acc">--<span>g</span></div><span class="tag" id="fallTag">No fall</span><svg id="accChart" viewBox="0 0 200 60" preserveAspectRatio="none"></svg></div>
+  </div>
+
+  <div class="wide">
+    <div class="card"><h2>Event log</h2><ul id="log"><li><time>--</time><span>No events yet.</span></li></ul></div>
+    <div class="card"><h2>Location and device</h2>
+      <div class="row"><span>GPS</span><b id="gps">No fix</b></div>
+      <div class="row"><span>Latitude</span><b id="lat">--</b></div>
+      <div class="row"><span>Longitude</span><b id="lng">--</b></div>
+      <div class="row"><span>Alarm</span><b id="alarm">Off</b></div>
+      <div class="row"><span>SMS</span><b id="sms">Not sent</b></div>
+      <div class="row"><span>Updated</span><b id="upd">--</b></div>
+      <p><a id="map" href="#" target="_blank" rel="noopener" hidden>Open in Google Maps</a></p>
+    </div>
+  </div>
+</main>
+
+<script>
+// Alert thresholds (mirror the ESP32 values where relevant)
+const HR_LOW=50, HR_HIGH=120, TEMP_HIGH=38.0, TEMP_LOW=35.0;
+const $=id=>document.getElementById(id);
+const hist={hr:[],temp:[],fsr:[],acc:[]};
+let timer=null, demoOn=false, prev={}, failCount=0;
+
+function spark(id,arr,color){
+  const svg=$(id);
+  if(arr.length<2){svg.innerHTML="";return}
+  const mn=Math.min(...arr),mx=Math.max(...arr),r=(mx-mn)||1;
+  const pts=arr.map((v,i)=>(i/(arr.length-1)*200).toFixed(1)+","+(55-((v-mn)/r)*50).toFixed(1)).join(" ");
+  svg.innerHTML=`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+}
+function push(k,v){if(v==null||isNaN(v))return;hist[k].push(v);if(hist[k].length>60)hist[k].shift()}
+function setTag(id,text,cls){const e=$(id);e.textContent=text;e.className="tag "+cls}
+function log(msg,bad){return;
+  const ul=$("log");if(ul.children[0]&&ul.children[0].textContent.includes("No events yet"))ul.innerHTML="";
+  const li=document.createElement("li");if(bad)li.className="bad";
+  li.innerHTML=`<time>${new Date().toLocaleTimeString()}</time><span>${bad?"<b>"+msg+"</b>":msg}</span>`;
+  ul.prepend(li);
+}
+
+function render(d){
+  // Vitals
+  const hrOK=d.hr>=30&&d.hr<=220;
+  $("hr").innerHTML=(hrOK?Math.round(d.hr):"--")+"<span>BPM</span>";
+  if(!hrOK)setTag("hrTag","No contact","mute");
+  else if(d.hr<HR_LOW||d.hr>HR_HIGH)setTag("hrTag","Out of range","warn");
+  else setTag("hrTag","Normal","");
+  const tOK=d.temp!=null&&!isNaN(d.temp);
+  $("temp").innerHTML=(tOK?d.temp.toFixed(1):"--")+"<span>°C</span>";
+  if(!tOK)setTag("tempTag","No reading","mute");
+  else if(d.temp>TEMP_HIGH||d.temp<TEMP_LOW)setTag("tempTag","Out of range","warn");
+  else setTag("tempTag","Normal","");
+  $("fsr").innerHTML=d.fsr+"<span>ADC</span>";
+  setTag("fsrTag",d.pressure?"Abnormal pressure":"Normal",d.pressure?"bad":"");
+  $("acc").innerHTML=d.accel.toFixed(2)+"<span>g</span>";
+  setTag("fallTag",d.fall?"Fall detected":"No fall",d.fall?"bad":"");
+
+  if(hrOK)push("hr",d.hr);if(tOK)push("temp",d.temp);push("fsr",d.fsr);push("acc",d.accel);
+  spark("hrChart",hist.hr,"var(--bad)");spark("tempChart",hist.temp,"var(--warn)");
+  spark("fsrChart",hist.fsr,"var(--ink)");spark("accChart",hist.acc,"var(--ok)");
+
+  // GPS
+  $("gps").textContent=d.gpsFix?"Fix":"No fix";
+  $("lat").textContent=d.gpsFix?d.lat.toFixed(6):"--";
+  $("lng").textContent=d.gpsFix?d.lng.toFixed(6):"--";
+  const m=$("map");
+  if(d.gpsFix){m.hidden=false;m.href=`https://maps.google.com/?q=${d.lat},${d.lng}`}else m.hidden=true;
+  $("alarm").textContent=d.alarm?"Active (countdown)":"Off";
+  $("sms").textContent=d.sms?"Sent / awaiting acknowledgement":"Not sent";
+  $("upd").textContent=new Date().toLocaleTimeString();
+
+  // Overall status
+  const s=$("status");
+  if(d.sms){s.className="bad";$("stText").textContent="EMERGENCY: alert sent";$("stSub").textContent="Worker must press the harness button to acknowledge.";}
+  else if(d.alarm){s.className="bad";$("stText").textContent="ALARM: cancel countdown running";$("stSub").textContent="SMS will be sent unless the button is pressed.";}
+  else if(d.fall||d.pressure){s.className="bad";$("stText").textContent="Abnormal condition detected";$("stSub").textContent="";}
+  else if(!hrOK||(tOK&&(d.temp>TEMP_HIGH||d.temp<TEMP_LOW))||(hrOK&&(d.hr<HR_LOW||d.hr>HR_HIGH))){s.className="warn";$("stText").textContent="Check vitals";$("stSub").textContent="A reading is missing or outside the normal range.";}
+  else{s.className="";$("stText").textContent="Worker safe";$("stSub").textContent="All sensors normal.";}
+
+  // Event log on state change
+  if(d.fall&&!prev.fall)log("Possible fall detected",true);
+  if(d.pressure&&!prev.pressure)log("Abnormal pressure reading ("+d.fsr+")",true);
+  if(d.alarm&&!prev.alarm)log("Alarm started, 5 s cancel window",true);
+  if(d.sms&&!prev.sms)log("Emergency SMS sent",true);
+  if(!d.sms&&prev.sms)log("Alert acknowledged or cancelled");
+  if(d.gpsFix&&prev.gpsFix===false)log("GPS fix acquired");
+  if(!d.gpsFix&&prev.gpsFix)log("GPS fix lost");
+  prev=d;
+}
+
+function conn(ok,text){$("dot").className="dot "+(ok?"on":"off");$("connText").textContent=text}
+
+async function loadHistory(){try{const rows=await (await fetch("/api/history?minutes=5")).json();rows.forEach(x=>{if(x.hr>=30)push("hr",x.hr);if(x.temp!=null)push("temp",x.temp);push("fsr",x.fsr);push("acc",x.accel)})}catch(e){}}
+async function loadEvents(){try{const ev=await (await fetch("/api/events?limit=50")).json();const ul=$("log");ul.innerHTML=ev.length?"":"<li><time>--</time><span>No events yet.</span></li>";ev.forEach(e=>{const li=document.createElement("li");if(e.bad)li.className="bad";li.innerHTML=`<time>${new Date(e.ts*1000).toLocaleTimeString()}</time><span>${e.bad?"<b>"+e.message+"</b>":e.message}</span>`;ul.appendChild(li)})}catch(e){}}
+function waiting(t,sub){const s=$("status");s.className="warn";$("stText").textContent=t;$("stSub").textContent=sub}
+async function poll(){
+  try{
+    const d=await (await fetch("/api/latest")).json();
+    if(!d.ts){conn(false,"Server running, no device data yet");waiting("Waiting for device","The harness has not sent any data.");return}
+    if(d.age>6){conn(false,"Device offline ("+Math.round(d.age)+" s)");waiting("Device offline","No data from the harness for "+Math.round(d.age)+" seconds.");return}
+    render(d);conn(true,"Live from device");
+  }catch(e){conn(false,"Backend unreachable");waiting("Backend unreachable","Is app.py running?")}
+}
+loadHistory().then(()=>{poll();loadEvents()});setInterval(poll,1000);setInterval(loadEvents,3000);
+</script>
+</body></html>
