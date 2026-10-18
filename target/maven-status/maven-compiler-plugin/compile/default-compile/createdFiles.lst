@@ -1,8 +1,0 @@
-com\harness\HarnessService.class
-com\harness\ReadingRepo.class
-com\harness\Reading.class
-com\harness\ApiController.class
-com\harness\HarnessApplication.class
-com\harness\Simulator.class
-com\harness\Event.class
-com\harness\EventRepo.class
